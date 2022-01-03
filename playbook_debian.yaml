@@ -1,0 +1,16 @@
+- name: Does Jira installation
+  hosts: all
+  become: yes
+  roles:
+    - role: geerlingguy.java
+    - role: geerlingguy.mysql_debian
+      vars:
+        ansible_python_interpreter: /usr/bin/python3 
+    - role: debian_jira
+    #- role: debian_jira
+    #- role: jira_role
+
+
+#So just the java ran with python 2 and the debian jira_role ran with python 2
+# mysql_debian runs with python3 now because we changed it with the vars. 
+

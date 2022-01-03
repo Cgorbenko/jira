@@ -1,0 +1,197 @@
+---
+# tasks file for jira_role
+
+- name: debug statement to check if it's working
+  debug:
+    msg: "It is connected!!"
+
+- name: Clean Cache
+  shell: yum clean all
+
+- name: Upgrade yum
+  become: yes
+  yum:
+    name: '*'
+    update_cache: yes
+    state: latest
+
+- name: Install Java
+  become: yes
+  yum:
+    name: java-1.8.0-openjdk
+
+- name: Install Java
+  become: yes
+  yum:
+    name: java-1.8.0-openjdk-devel
+    
+
+- name: Read java home
+  shell: "readlink -f `which javac` | sed 's:/bin/javac::'"
+  register: java_home_cmd
+  changed_when: false
+
+- name: Create env var
+  become: yes
+  file:
+    path: /etc/environment
+    owner: root
+    group: root
+    state: touch
+  register: environment_file_result
+  changed_when: environment_file_result != "file"
+
+- name: Setting Java home var permanently
+  become: yes
+  lineinfile:
+    dest: /etc/environment
+    regexp: '^{{ item.key }}\ ?='
+    line: "{{ item.key }}='{{ item.value }}'"
+  loop:
+    - key: JAVA_HOME
+      value: "{{ java_home_cmd.stdout }}"
+
+- name: Create jira installer directory
+  file:
+    path: /opt
+    state: directory
+
+- name: Download jira connector
+  get_url:
+    url: "https://www.atlassian.com/software/jira/downloads/binary/atlassian-jira-software-7.3.0-x64.bin"
+    dest: /opt/atlassian-jira-software-7.3.0-x64.bin
+
+- name: Set the proper file permission.
+  file:
+    path: /opt
+    state: directory
+    recurse: yes
+    mode: '1777'
+
+- name: Enable MySQLD
+  systemd:
+    name: mysqld
+    state: started
+
+- name: Create a new database with name 'jira'
+  mysql_db:
+    name: jira2
+    state: present
+    login_password: root
+    login_user: root
+    encoding: utf8mb4
+  tags: mysql
+
+- name: Create new user
+  mysql_user:
+    name: tina
+    password: password
+    login_password: root
+    login_user: root
+    priv: '*.*:ALL'
+
+- name: Create MySQL directory (no -p) mkdir /downloads/mysql -p
+  file:
+    path: /downloads/mysql
+    state: directory
+
+- name: Go to folder and execute ls command
+  command: chdir=/downloads/mysql ls
+
+- name: Download MySQL connector
+  get_url:
+    url: "https://cdn.mysql.com//Downloads/Connector-J/mysql-connector-java-5.1.48.tar.gz"
+    dest: /downloads/mysql/mysql-connector-java-5.1.48.tar.gz
+
+- name: Extract gz missing -zxvf
+  unarchive:
+    src: /downloads/mysql/mysql-connector-java-5.1.48.tar.gz
+    dest: /downloads/mysql
+    remote_src: yes
+
+- name: Create jira directory
+  file:
+    path: /downloads/jira
+    state: directory
+
+- name: Go to folder and execute ls command
+  command: chdir=/downloads/jira ls
+
+- name: Download jira connector
+  get_url:
+    url: "https://product-downloads.atlassian.com/software/jira/downloads/atlassian-jira-core-8.5.0.tar.gz"
+    dest: /downloads/jira/atlassian-jira-core-8.5.0.tar.gz
+
+- name: Extrac
+  unarchive:
+    src: /downloads/jira/atlassian-jira-core-8.5.0.tar.gz
+    dest: /opt
+    remote_src: yes
+
+- name: Create symbolic link 
+  file:
+    src: /opt/atlassian-jira-core-8.5.0-standalone
+    dest: /opt/jira
+    state: link
+
+- name: Create jira-home directory
+  file:
+    path: /opt/jira-home
+    state: directory
+
+
+- name: Copy the MySQL Java connector to the Jira's LIB directory
+  copy:
+    src: /downloads/mysql/mysql-connector-java-5.1.48/mysql-connector-java-5.1.48.jar
+    dest: /opt/jira/lib/mysql-connector-java-5.1.48.jar
+    mode: '1777'
+    remote_src: yes
+
+- name: Set the proper file permission.
+  file:
+    path: /opt/jira
+    state: directory
+    recurse: yes
+    mode: '1777'
+
+- name: Set the proper file permission.
+  file:
+    path: /opt/jira-home
+    state: directory
+    recurse: yes
+    mode: '1777'
+
+- name: Creating an empty file
+  file:
+    path: /etc/profile.d/jira.sh
+    state: touch
+
+- name: Setting JIRA_HOME variable
+  blockinfile:
+    path: /etc/profile.d/jira.sh
+    block: |
+      #/bin/bash
+      export JIRA_HOME=/opt/jira-home
+  tags: testing
+
+
+- name: Create jira directory
+  file:
+    path: /tmp
+    state: directory
+
+- name: Download jira connector
+  get_url:
+    url: "https://www.atlassian.com/software/jira/downloads/binary/atlassian-jira-software-8.7.1-x64.bin"
+    dest: /tmp/atlassian-jira-software-8.7.1-x64.bin
+    mode: a+x
+
+- name: Start jira
+  become: yes
+  shell: /tmp/atlassian-jira-software-8.7.1-x64.bin
+
+
+# start jira by running this command
+#- name: Start jira 
+#  become: yes
+#  shell: sudo /opt/jira/bin/start-jira.sh

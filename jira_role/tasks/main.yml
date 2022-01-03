@@ -1,0 +1,237 @@
+---
+# tasks file for jira_role
+
+- name: debug statement to check if it's working
+  debug:
+    msg: "It is connected!!"
+
+- name: Upgrade apt
+  become: yes
+  apt:
+    upgrade: "yes"
+    update_cache: yes
+
+- name: Install Java
+  become: yes
+  apt:
+    name: default-jdk
+
+- name: Read java home
+  shell: "readlink -f `which javac` | sed 's:/bin/javac::'"
+  register: java_home_cmd
+  changed_when: false
+
+- name: Create env var
+  become: yes
+  file:
+    path: /etc/environment
+    owner: root
+    group: root
+    state: touch
+  register: environment_file_result
+  changed_when: environment_file_result != "file"
+
+- name: Setting Java home var permanently
+  become: yes
+  lineinfile:
+    dest: /etc/environment
+    regexp: '^{{ item.key }}\ ?='
+    line: "{{ item.key }}='{{ item.value }}'"
+  loop:
+    - key: JAVA_HOME
+      value: "{{ java_home_cmd.stdout }}"
+
+- name: Install MySQL server
+  become: yes
+  apt:
+    name: mysql-server
+
+- name: Install MySQL client
+  become: yes
+  apt:
+    name: mysql-client
+
+- name: Create MySQL directory (no -p) mkdir /downloads/mysql -p
+  file:
+    path: /downloads/mysql
+    state: directory
+
+- name: Go to folder and execute ls command
+  command: chdir=/downloads/mysql ls
+
+- name: Download MySQL connector
+  get_url:
+    url: "https://cdn.mysql.com//Downloads/Connector-J/mysql-connector-java-5.1.48.tar.gz"
+    dest: /downloads/mysql/mysql-connector-java-5.1.48.tar.gz
+
+- name: Extract gz missing -zxvf
+  unarchive:
+    src: /downloads/mysql/mysql-connector-java-5.1.48.tar.gz
+    dest: /downloads/mysql
+    remote_src: yes
+
+- name: Add a line to a file if the file does not exist, without passing regexp
+  blockinfile:
+    path: /etc/mysql/mysql.conf.d/mysqld.cnf
+    block: |
+      [mysqld]
+      default-storage-engine=INNODB
+      innodb_default_row_format=DYNAMIC
+      innodb_large_prefix=ON
+      innodb_file_format=Barracuda
+      innodb_log_file_size=2G
+      character_set_server=utf8mb4
+      collation-server=utf8mb4_bin
+      max_allowed_packet=256M
+      transaction-isolation=READ-COMMITTED
+      binlog_format=row
+   
+- name: Restart service mysql
+  service:
+    name: mysql
+    state: restarted
+
+- name: Create a new database with name 'jira'
+  mysql_db:
+    name: jira2
+    state: present
+    login_password: root
+    login_user: root
+    encoding: utf8mb4
+  tags: mysql
+
+- name: Create new user
+  mysql_user:
+    name: tina
+    password: password
+    login_password: root
+    login_user: root
+    priv: '*.*:ALL'
+  tags: mysql
+
+#- name: Logging into MyySQL
+#  shell: mysql --user=root --password=root 
+
+#- name: shell 
+#  shell: |
+#    CREATE DATABASE jira CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
+#    CREATE USER 'jira'@'%' IDENTIFIED BY 'kamisama123'; 
+#    GRANT ALL PRIVILEGES ON jira.* TO 'jira'@'%'; 
+#    quit;
+
+
+- name: Create jira directory
+  file:
+    path: /downloads/jira
+    state: directory
+
+- name: Go to folder and execute ls command
+  command: chdir=/downloads/jira ls
+
+- name: Download jira connector
+  get_url:
+    url: "https://product-downloads.atlassian.com/software/jira/downloads/atlassian-jira-core-8.5.0.tar.gz"
+    dest: /downloads/jira/atlassian-jira-core-8.5.0.tar.gz
+
+- name: Extrac
+  unarchive:
+    src: /downloads/jira/atlassian-jira-core-8.5.0.tar.gz
+    dest: /opt
+    remote_src: yes
+
+- name: Create symbolic link 
+  file:
+    src: /opt/atlassian-jira-core-8.5.0-standalone
+    dest: /opt/jira
+    state: link
+
+- name: Create jira-home directory
+  file:
+    path: /opt/jira-home
+    state: directory
+
+
+- name: Copy the MySQL Java connector to the Jira's LIB directory
+  copy:
+    src: /downloads/mysql/mysql-connector-java-5.1.48/mysql-connector-java-5.1.48.jar
+    dest: /opt/jira/lib/mysql-connector-java-5.1.48.jar
+    mode: '1777'
+    remote_src: yes
+
+- name: Set the proper file permission.
+  file:
+    path: /opt/jira
+    state: directory
+    recurse: yes
+    mode: '1777'
+
+- name: Set the proper file permission.
+  file:
+    path: /opt/jira-home
+    state: directory
+    recurse: yes
+    mode: '1777'
+
+- name: Creating an empty file
+  file:
+    path: /etc/profile.d/jira.sh
+    state: touch
+
+- name: Setting JIRA_HOME variable
+  blockinfile:
+    path: /etc/profile.d/jira.sh
+    block: |
+      #/bin/bash
+      export JIRA_HOME=/opt/jira-home
+  tags: testing
+
+
+
+- name: Create jira directory
+  file:
+    path: /tmp
+    state: directory
+
+- name: Download jira connector
+  get_url:
+    url: "https://www.atlassian.com/software/jira/downloads/binary/atlassian-jira-software-8.7.1-x64.bin"
+    dest: /atlassian-jira-software-8.7.1-x64.bin
+    mode: a+x
+  tags: jira
+
+- name: Start jira
+  become: yes
+  shell: /atlassian-jira-software-8.7.1-x64.bin
+  
+
+
+
+# pid file must be removed for jira to work properly. 
+# Fixing error unable to read pid file. start aborted
+#- name: Remove catalina.pid
+#  file:
+#    path: /opt/jira/bin/catalina.pid
+#    state: absent
+
+
+#- name: Unconditionally reboot the machine with all defaults
+#  reboot:
+
+# pid file must be removed for jira to work properly. 
+# Fixing error unable to read pid file. start aborted
+#- name: Remove catalina.pid 
+#  file:
+#    path: /opt/jira/bin/catalina.pid
+#    state: absent
+
+
+#- name: Start jira 
+#  become: yes
+#  shell: /opt/jira/bin/start-jira.sh
+
+# pid file must be removed for jira to work properly. 
+# Fixing error unable to read pid file. start aborted
+#- name: Remove catalina.pid 
+#  file:
+#    path: /opt/jira/bin/catalina.pid
+#    state: absent

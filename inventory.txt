@@ -1,0 +1,7 @@
+all ansible_host=192.168.1.54 ansible_ssh_pass=snejok ansible_user=tina
+
+# centos ansible_host=192.168.1.135 ansible_user=tina
+
+# debian ansible_host=192.168.1.135 ansible_user=tina
+
+# ubuntu ansible_host=192.168.1.135 ansible_user=tina
